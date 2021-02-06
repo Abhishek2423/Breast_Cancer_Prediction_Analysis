@@ -1,0 +1,237 @@
+---
+title: "Group23 Final Project- Breast Cancer Analysis"
+author: "Abhishek Ravate and Swapnil Bhilavade"
+date: "12/6/2020"
+output: html_document
+---
+
+
+INSTALLING ALL NECESSARY LIBRARIES
+```{r}
+
+library(readxl)
+library(ggplot2)
+library(corrplot)
+library(randomForest)
+library (e1071)
+library(Amelia)
+library(devtools)
+library(neuralnet)
+library(caret)
+library(ggfortify)
+
+```
+
+
+```{r}
+cancer = read.csv("data.csv", header=T, stringsAsFactors=F)
+cancer$diagnosis =  ifelse(cancer$diagnosis=="M", gsub("M", 1, cancer$diagnosis), gsub("B", 0, cancer$diagnosis))
+```
+
+```{r}
+
+missmap(cancer, col = c("blue", "green"), legend = FALSE)
+
+```
+
+
+```{r}
+cancer = cancer[,c(-33,-1)]
+
+#Summary of all variables
+summary(cancer)
+
+```
+
+```{r}
+#Plots of diagnosis
+ggplot(cancer,aes(x= diagnosis))+geom_bar(stat="count",fill ="steelblue",width =0.6)+scale_x_discrete(labels=c("Benign","Malign"))+ 
+  labs(title = "Proportion of diagnosis") + theme_gray(base_size = 19) +
+  theme(axis.text=element_text(size=12),axis.title=element_text(size=12,face="bold"))
+  
+```  
+
+
+```{r}
+# Corelation plots
+cancer$diagnosis = as.numeric(cancer$diagnosis)
+C = cor(cancer)
+corrplot(C, method = "circle")
+
+```
+
+
+```{r}
+#Make diagnosis as factor
+cancer$diagnosis = as.factor(cancer$diagnosis)
+
+#Create PCAs
+df.pca = prcomp(cancer[,2:31], center = TRUE, scale. =TRUE)
+summary(df.pca)
+
+pcadata = as.data.frame(df.pca$x[,1:9])
+pcadata$diagnosis = cancer$diagnosis
+
+```
+
+```{r}
+result_matrix = matrix(nrow = 100, ncol = 14)
+
+for (i in 1:100){
+  
+  set.seed(i)
+  
+  n=nrow(cancer)
+  size.train=floor(n*0.50)
+  size.valid=floor(n*0.50)
+  
+  id.train=sample(1:n,size.train,replace=FALSE)
+  id.valid=sample(setdiff(1:n,id.train),size.valid,replace=FALSE)
+  
+  mydata.train=cancer[id.train,]
+  mydata.valid=cancer[id.valid,]
+  
+  #RANDOM FOREST 
+  rf=randomForest(diagnosis~.,data=mydata.train,ntree=250, mtry = 8)
+  predrf=predict(rf,newdata=mydata.valid)
+  accuracy_forest = mean(predrf==mydata.valid$diagnosis)
+  result_matrix[i,1] =accuracy_forest
+  
+  #SUPPORT VECTOR MACHINE
+  mysvm = svm(diagnosis~., data = mydata.train, kernel="polynomial", cost=5, degree=3)
+  pred_svm_optimal = predict(mysvm, mydata.valid)
+  accuracy_svm = mean(pred_svm_optimal==mydata.valid$diagnosis)  
+  result_matrix[i,2] = accuracy_svm  
+  
+  #LOGISTIC REGRESSION
+  logistic = glm(mydata.train$diagnosis~., data = mydata.train, family = binomial)
+  pred = round(predict(logistic, type = "response", newdata=mydata.valid))
+  accuracy_logistic = mean(pred==mydata.valid$diagnosis)
+  result_matrix[i,3] = accuracy_logistic
+  
+  
+  
+   #LINEAR REGRESSION
+  linear = lm(diagnosis~. , mydata.train, family= binomial )
+ predict_lm = predict(linear, mydata.valid)
+ accuracy_linear = mean(predict_lm==mydata.valid$diagnosis)
+ result_matrix[i,4] =accuracy_linear
+ 
+ 
+  #KNN
+  model_knn_df <- knn3(diagnosis ~., data = mydata.train , k = 3)
+  prediction_knn_df <- predict(model_knn_df, mydata.valid)
+  accuracy_knn = mean(prediction_knn_df==mydata.valid$diagnosis)
+  result_matrix[i,5] =accuracy_knn
+  
+  #NAIV BAYES 
+  model_nb <- naiveBayes(diagnosis~.,
+                    mydata.train,
+                    trace=FALSE)
+   prediction_nb_df <- predict(model_nb, mydata.valid)
+    accuracy_nb = mean(prediction_nb_df==mydata.valid$diagnosis)
+    result_matrix[i,6] =accuracy_nb
+  
+  
+    #ARTIFICIAL NEURAL NETWORK 
+ nn=neuralnet(mydata.train$diagnosis~. , data = mydata.train , hidden = c(2),err.fct = "ce" , act.fct = "logistic" , linear.output =  F, rep = 5,  threshold = 2)
+  predict_nn= predict(nn, mydata.valid)
+ accuracy_nn = mean(predict_nn==mydata.valid$diagnosis)
+ result_matrix[i,7] =accuracy_nn
+  
+   
+  #With PCAs  
+  n=nrow(pcadata)
+  size.train=floor(n*0.50)
+  size.valid=floor(n*0.50)
+  
+  id.train=sample(1:n,size.train,replace=FALSE)
+  id.valid=sample(setdiff(1:n,id.train),size.valid,replace=FALSE)
+  
+  mydata.train=pcadata[id.train,]
+  mydata.valid=pcadata[id.valid,]
+
+  #RANDOM FOREST 
+  rf=randomForest(diagnosis~.,data=mydata.train,ntree=250, mtry = 8)
+  predrf=predict(rf,newdata=mydata.valid)
+  accuracy_forest = mean(predrf==mydata.valid$diagnosis)
+  result_matrix[i,8] =accuracy_forest  
+    
+  #SUPPORT VECTOR MACHINE 
+  mysvm = svm(diagnosis~., data = mydata.train, kernel="polynomial", cost=5, degree=3)
+  pred_svm_optimal = predict(mysvm, mydata.valid)
+  accuracy_svm = mean(pred_svm_optimal==mydata.valid$diagnosis)
+  result_matrix[i,9] = accuracy_svm  
+  
+  #LOGISTIC REGRESSION 
+  logistic = glm(mydata.train$diagnosis~., data = mydata.train, family = binomial)
+  pred = round(predict(logistic, type = "response", newdata=mydata.valid))
+  accuracy_logistic = mean(pred==mydata.valid$diagnosis)
+  result_matrix[i,10] = accuracy_logistic
+  
+    #KNN
+  model_knn_df <- knn3(diagnosis ~., data = mydata.train, k = 3 )
+  prediction_knn_df <- predict(model_knn_df, mydata.valid)
+  accuracy_knn = mean(prediction_knn_df==mydata.valid$diagnosis)
+  result_matrix[i,11] =accuracy_forest
+  
+  
+    #NAIVE BAYES 
+  model_nb <- naiveBayes(diagnosis~.,
+                    mydata.train,
+                    trace=FALSE)
+   prediction_nb_df <- predict(model_nb, mydata.valid)
+    accuracy_nb = mean(prediction_nb_df==mydata.valid$diagnosis)
+    result_matrix[i,12] =accuracy_nb
+  
+
+  #LINEAR REGRESSION 
+  linear = lm(diagnosis~. , mydata.train, family= binomial )
+ predict_lm = predict(linear, mydata.valid)
+ accuracy_linear = mean(predict_lm==mydata.valid$diagnosis)
+ result_matrix[i,13] =accuracy_linear
+ # result_matrix[i,8]= accuracy_linear
+  
+  
+  #ARTIFICIAL NEURAL NETWORK 
+  #formula <- sprintf("%s%s", diagnosis~. , paste("V", 2:31, collapse = " + ", sep = ""))
+ nn=neuralnet(mydata.train$diagnosis~. , data = mydata.train , hidden = c(2), err.fct = "ce", act.fct = "logistic" ,linear.output = F, rep = 5,  threshold = 2)
+predict_nn= predict(nn, mydata.valid)
+ accuracy_nn = mean(predict_nn==mydata.valid$diagnosis)
+ result_matrix[i,14] =accuracy_nn
+  
+  
+ }   
+```
+
+```{r}
+accuracy_forest = mean(result_matrix[,1])
+accuracy_svm = mean(result_matrix[,2])
+accuracy_logistic = mean(result_matrix[,3])
+accuracy_linear = mean(result_matrix[,4])
+accuracy_knn = mean(result_matrix[,5])
+accuracy_nb = mean(result_matrix[,6])
+accuracy_nn = mean(result_matrix[,7])
+accuracy_forest_PCA = mean(result_matrix[,8])
+accuracy_svm_PCA = mean(result_matrix[,9])
+accuracy_logistic_PCA = mean(result_matrix[,10])
+accuracy_linear_PCA = mean(result_matrix[,11])
+accuracy_knn_PCA = mean(result_matrix[,12])
+accuracy_nb_PCA = mean(result_matrix[,13])
+accuracy_nn_PCA = mean(result_matrix[,14])
+cat("Ramdom forest:", accuracy_forest,"\n")
+cat("SVM:", accuracy_svm,"\n")
+cat("Logistic regression:", accuracy_logistic,"\n")
+cat("Linear Regression:", accuracy_linear,"\n")
+cat("KNN:", accuracy_knn,"\n")
+cat("Naive Bayes:", accuracy_nb,"\n")
+cat("Neural Network:", accuracy_nn,"\n")
+cat("Random forest with PCA:", accuracy_forest_PCA,"\n")
+cat("SVM with PCA:", accuracy_svm_PCA,"\n")
+cat("Logistic regression with PCA:", accuracy_logistic_PCA,"\n")
+cat("Linear Regression with PCA:", accuracy_linear_PCA,"\n")
+cat("KNN with PCA:", accuracy_knn_PCA,"\n")
+cat("Naive Bayes with PCA:", accuracy_nb_PCA,"\n")
+cat("Neural Network with PCA:", accuracy_nn_PCA,"\n")
+
+```
